@@ -46,8 +46,8 @@ const char MAIN_page[] = R"=====(<!DOCTYPE html>
         <input type="radio" name="radio" value="fade" onchange="animationState(this.value)">
         <span class="checkmark"></span>
     </label>
-    <label class="container">Fade IN OUT
-        <input type="radio" name="radio" value="fade" onchange="animationState(this.value)">
+    <label class="container">Color wipe
+        <input type="radio" name="radio" value="wipe" onchange="animationState(this.value)">
         <span class="checkmark"></span>
     </label>
 </div>
@@ -87,23 +87,12 @@ function sendLED(led) {
     }
 function animationState(state) {
     var xhttp = new XMLHttpRequest();
-    xhttp.open("GET", "animationState?="+state, true);
+    xhttp.open("GET", "animationState?anim="+state, true);
     xhttp.send();
 
 }
 
 
-function sendAnimation(ledA) {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("LEDAnimation").innerHTML =
-                this.responseText;
-        }
-    };
-    xhttp.open("GET", "setLEDAnimation?LEDAnimation="+ledA, true);
-    xhttp.send();
-}
 function powerLED() {
     var xhttp = new XMLHttpRequest();
     var checkBox = document.getElementById("powerSwitch");
@@ -119,7 +108,7 @@ function powerLED() {
 
 
 
-    function getData() {
+    /*function getData() {
         var xhttp = new XMLHttpRequest();
         xhttp.onreadystatechange = function() {
             if (this.readyState == 4 && this.status == 200) {
@@ -129,7 +118,7 @@ function powerLED() {
         };
         xhttp.open("GET", "readADC", true);
         xhttp.send();
-    }
+    }*/
 )=====";
 const char cssCode[] = R"=====(.container {
     display: block;

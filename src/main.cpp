@@ -2,7 +2,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include "index.h"
-
 #include <stdio.h>
 
 const char* ssid = "Katowice";
@@ -57,6 +56,19 @@ void FadeInOut(byte red, byte green, byte blue){
     }
 }
 
+uint32_t Wheel(byte WheelPos) {
+    WheelPos = 255 - WheelPos;
+    if(WheelPos < 85) {
+        return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+    }
+    if(WheelPos < 170) {
+        WheelPos -= 85;
+        return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+    }
+    WheelPos -= 170;
+    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
+
 void handleColor() {
     auto hex_state = server.arg("hex");
     const char *cstr = hex_state.c_str();
@@ -89,21 +101,40 @@ void handleLED() {
     server.send(200, "text/plane", ledState); //Send web page
 }
 
+String animationState;
 void handleAnimation() {
-    String animationState = server.arg("");
+    animationState = server.arg("anim");
     Serial.println(animationState);
-    if(animationState == "rain")
+    if(animationState == "none")
     {
-        digitalWrite(LED,LOW); //LED ON
-         //Feedback parameter
+        setAll(r, g, b);
     }
-    else if(animationState == "none")
-    {
-        digitalWrite(LED,HIGH); //LED OFF
-         //Feedback parameter
+    if(animationState == "rain") {
+            uint16_t i, j;
+            for (j = 0; j < 256; j++) {
+                for (i = 0; i < strip.numPixels(); i++) {
+                    strip.setPixelColor(i, Wheel((i + j) & 255));
+                }
+                strip.show();
+                delay(40);
+            }
+        }
+    if(animationState == "fade"){
+        FadeInOut(r, g, b);
     }
-
-    server.send(200, "text/plane", animationState); //Send web page
+    if(animationState == "wipe"){
+        for(uint16_t i=0; i<NUM_LEDS; i++) {
+            setPixel(i, r, g, b);
+            showStrip();
+            delay(40);
+        }
+        for(uint16_t i=0; i<NUM_LEDS; i++) {
+            setPixel(i, 0, 0, 0);
+            showStrip();
+            delay(40);
+        }
+    }
+    server.send(200, "text/plane", animationState);
 }
 //==============================================================
 //                  SETUP
@@ -160,6 +191,7 @@ void setup(void){
 //==============================================================
 //                     LOOP
 //==============================================================
+String temp;
 void loop(void){
-    server.handleClient();          //Handle client requests
+    server.handleClient();//Handle client requests
 }
