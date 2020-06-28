@@ -15,7 +15,7 @@ const char* ssid = "Katowice";
 const char* password = "Akant24#!";
 
 #define PIN 4
-#define NUM_LEDS 120
+#define NUM_LEDS 60
 int Red, Green, Blue;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 AsyncWebServer server(80); //Server on port 80
