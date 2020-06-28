@@ -36,7 +36,7 @@ void setAll(byte red, byte green, byte blue) {
     }
     strip.show();
 }
-
+//zmiana
 void FadeInOut(byte red, byte green, byte blue){
     float r, g, b;
 
