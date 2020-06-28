@@ -1,25 +1,28 @@
 #include <Adafruit_NeoPixel.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include "index.h"
-#include <stdio.h>
+#include <cstdio>
+
+//Static IP address configuration
+IPAddress staticIP(192, 168, 66, 63); //ESP static ip
+IPAddress gateway(192, 168, 66, 1);   //IP Address of your WiFi Router (Gateway)
+IPAddress subnet(255, 255, 255, 0);  //Subnet mask
+IPAddress dns(192, 168, 66, 1);  //DNS
 
 const char* ssid = "Katowice";
 const char* password = "Akant24#!";
 
 #define PIN 4
 #define NUM_LEDS 120
-int r, g, b;
+int Red, Green, Blue;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
-ESP8266WebServer server(80); //Server on port 80
+AsyncWebServer server(80); //Server on port 80
 #define LED 2  //On board LED
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
-void showStrip() {
-
-    strip.show();
-}
 
 void setPixel(int Pixel, byte red, byte green, byte blue) {
 
@@ -31,7 +34,7 @@ void setAll(byte red, byte green, byte blue) {
     for(int i = 0; i < NUM_LEDS; i++ ) {
         setPixel(i, red, green, blue);
     }
-    showStrip();
+    strip.show();
 }
 
 void FadeInOut(byte red, byte green, byte blue){
@@ -42,7 +45,7 @@ void FadeInOut(byte red, byte green, byte blue){
         g = (k/256.0)*green;
         b = (k/256.0)*blue;
         setAll(r,g,b);
-        showStrip();
+        strip.show();
         delay(5);
     }
 
@@ -51,7 +54,7 @@ void FadeInOut(byte red, byte green, byte blue){
         g = (k/256.0)*green;
         b = (k/256.0)*blue;
         setAll(r,g,b);
-        showStrip();
+        strip.show();
         delay(5);
     }
 }
@@ -69,22 +72,22 @@ uint32_t Wheel(byte WheelPos) {
     return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
 
-void handleColor() {
-    auto hex_state = server.arg("hex");
+void handleColor(AsyncWebServerRequest *request) {
+    auto hex_state = request->arg("hex");
     const char *cstr = hex_state.c_str();
     Serial.println(hex_state);
-    sscanf(cstr, "%02x%02x%02x", &r, &g, &b);
-    Serial.println(r);
-    Serial.println(g);
-    Serial.println(b);
-    setAll(r, g, b);
-    server.send(200, "text/plane", hex_state);
+    sscanf(cstr, "%02x%02x%02x", &Red, &Green, &Blue);
+    Serial.println(Red);
+    Serial.println(Green);
+    Serial.println(Blue);
+    setAll(Red, Green, Blue);
+    request->send(200, "text/plane", hex_state);
 }
 
-void handleLED() {
+void handleLED(AsyncWebServerRequest *request) {
 
     String ledState = "OFF";
-    String t_state = server.arg("LEDstate");
+    String t_state = request->arg("LEDstate");
     Serial.println(t_state);
 
     if(t_state == "1")
@@ -98,16 +101,16 @@ void handleLED() {
         ledState = "OFF"; //Feedback parameter
     }
 
-    server.send(200, "text/plane", ledState); //Send web page
+    request->send(200, "text/plane", ledState); //Send web page
 }
 
 String animationState;
-void handleAnimation() {
-    animationState = server.arg("anim");
+void handleAnimation(AsyncWebServerRequest *request) {
+    animationState = request->arg("anim");
     Serial.println(animationState);
     if(animationState == "none")
     {
-        setAll(r, g, b);
+        setAll(Red, Green, Blue);
     }
     if(animationState == "rain") {
             uint16_t i, j;
@@ -120,21 +123,38 @@ void handleAnimation() {
             }
         }
     if(animationState == "fade"){
-        FadeInOut(r, g, b);
+        float r, g, b;
+        for(int k = 0; k < 256; k=k+1) {
+            r = (k/256.0)*Red;
+            g = (k/256.0)*Green;
+            b = (k/256.0)*Blue;
+            setAll(r,g,b);
+            strip.show();
+            delay(5);
+        }
+
+        for(int k = 255; k >= 0; k=k-2) {
+            r = (k/256.0)*Red;
+            g = (k/256.0)*Green;
+            b = (k/256.0)*Blue;
+            setAll(r,g,b);
+            strip.show();
+            delay(5);
+        }
     }
     if(animationState == "wipe"){
         for(uint16_t i=0; i<NUM_LEDS; i++) {
-            setPixel(i, r, g, b);
-            showStrip();
+            setPixel(i, Red, Green, Blue);
+            strip.show();
             delay(40);
         }
         for(uint16_t i=0; i<NUM_LEDS; i++) {
             setPixel(i, 0, 0, 0);
-            showStrip();
+            strip.show();
             delay(40);
         }
     }
-    server.send(200, "text/plane", animationState);
+    request->send(200, "text/plane", animationState);
 }
 //==============================================================
 //                  SETUP
@@ -145,6 +165,7 @@ void setup(void){
     strip.begin();
     strip.show();
 
+    WiFi.hostname("Wemos_Led_RGB");
     WiFi.begin(ssid, password);     //Connect to your WiFi router
     Serial.println("");
 
@@ -163,22 +184,21 @@ void setup(void){
     Serial.println(ssid);
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());  //IP address assigned to your ESP
+    server.on("/",HTTP_GET, [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
 
-    server.on("/", []() {                     //Define the handling function for root path (HTML message)
-
-        server.send(200, "text/html", MAIN_page);
-
-    });
-
-    server.on("/javaScript", []() { //Define the handling function for the javascript path
-
-        server.send(200, "text/html", javaScript);
+        request->send(200, "text/html", MAIN_page);
 
     });
 
-    server.on("/cssCode", []() { //Define the handling function for the CSS path
+    server.on("/javaScript", [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
 
-        server.send(200, "text/css", cssCode);
+        request->send(200, "text/html", javaScript);
+
+    });
+
+    server.on("/cssCode", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
+
+        request->send(200, "text/css", cssCode);
 
     });
     server.on("/setLED", handleLED);
@@ -191,7 +211,7 @@ void setup(void){
 //==============================================================
 //                     LOOP
 //==============================================================
-String temp;
+
 void loop(void){
-    server.handleClient();//Handle client requests
+
 }

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <h1>WIFI LED Control</h1>
+</head>
+<link rel="stylesheet" type="text/css" href="/cssCode">
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
+<script src="/javaScript"></script>
+<div class="power-switch">
+    <input type="checkbox" id="powerSwitch" onclick="powerLED()" />
+    <div class="button">
+        <svg class="power-off">
+            <use xlink:href="#line" class="line" />
+            <use xlink:href="#circle" class="circle" />
+        </svg>
+        <svg class="power-on">
+            <use xlink:href="#line" class="line" />
+            <use xlink:href="#circle" class="circle" />
+        </svg>
+    </div>
+</div>
+<!-- SVG -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+    <symbol xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" id="line">
+        <line x1="75" y1="34" x2="75" y2="58"/>
+    </symbol>
+    <symbol xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150" id="circle">
+        <circle cx="75" cy="80" r="35"/>
+    </symbol>
+</svg>
+
+<div class="wheel" id="colorWheelDemo"></div>
+
+<div>
+    <label class="container">Still
+        <input type="radio" checked="checked" name="radio" value="none" onchange="animationState(this.value)">
+        <span class="checkmark"></span>
+    </label>
+    <label class="container">Rainbow
+        <input type="radio" name="radio" value="rain" onchange="animationState(this.value)">
+        <span class="checkmark"></span>
+    </label>
+    <label class="container">Fade IN OUT
+        <input type="radio" name="radio" value="fade" onchange="animationState(this.value)">
+        <span class="checkmark"></span>
+    </label>
+    <label class="container">Color wipe
+        <input type="radio" name="radio" value="wipe" onchange="animationState(this.value)">
+        <span class="checkmark"></span>
+    </label>
+</div>
+</body>
+</html>

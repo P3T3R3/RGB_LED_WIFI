@@ -91,8 +91,6 @@ function animationState(state) {
     xhttp.send();
 
 }
-
-
 function powerLED() {
     var xhttp = new XMLHttpRequest();
     var checkBox = document.getElementById("powerSwitch");
@@ -105,20 +103,6 @@ function powerLED() {
     xhttp.open("GET", "setLED?LEDstate="+led, true);
     xhttp.send();
 }
-
-
-
-    /*function getData() {
-        var xhttp = new XMLHttpRequest();
-        xhttp.onreadystatechange = function() {
-            if (this.readyState == 4 && this.status == 200) {
-                document.getElementById("ADCValue").innerHTML =
-                    this.responseText;
-            }
-        };
-        xhttp.open("GET", "readADC", true);
-        xhttp.send();
-    }*/
 )=====";
 const char cssCode[] = R"=====(.container {
     display: block;
