@@ -2,9 +2,8 @@
 #include <ESP8266WiFi.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include "index.h"
 #include <cstdio>
-
+#include "LittleFS.h"
 //Static IP address configuration
 IPAddress staticIP(192, 168, 66, 63); //ESP static ip
 IPAddress gateway(192, 168, 66, 1);   //IP Address of your WiFi Router (Gateway)
@@ -17,6 +16,7 @@ const char* password = "Akant24#!";
 #define PIN 4
 #define NUM_LEDS 60
 int Red, Green, Blue;
+unsigned long previousMillis = 0;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 AsyncWebServer server(80); //Server on port 80
 #define LED 2  //On board LED
@@ -108,20 +108,82 @@ String animationState;
 void handleAnimation(AsyncWebServerRequest *request) {
     animationState = request->arg("anim");
     Serial.println(animationState);
+    request->send(200, "text/plane", animationState);
+}
+//==============================================================
+//                  SETUP
+//==============================================================
+void setup(void){
+    Serial.begin(115200);
+    LittleFS.begin();
+    strip.begin();
+    strip.show();
+
+    WiFi.hostname("Wemos_Led_RGB");
+    WiFi.begin(ssid, password);     //Connect to your WiFi router
+    Serial.println("");
+
+    //Onboard LED port Direction output
+    pinMode(LED,OUTPUT);
+
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    //If connection successful show IP address in serial monitor
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());  //IP address assigned to your ESP
+    server.on("/",HTTP_GET, [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
+
+        request->send(LittleFS, "/index.html", String());
+
+    });
+
+    server.on("/javaScript.js", [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
+
+        request->send(LittleFS,"/javaScript.js", "text/html");
+
+    });
+
+    server.on("/cssCode.css", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
+
+        request->send(LittleFS,"/cssCode.css", "text/css");
+
+    });
+    server.on("/setLED", handleLED);
+    server.on("/animationState", handleAnimation);
+    server.on("/color", handleColor);
+    server.begin();                  //Start server
+    Serial.println("HTTP server started");
+    FadeInOut(100, 100, 100);
+}
+//==============================================================
+//                     LOOP
+//==============================================================
+
+void loop(void){
+    unsigned long currentMillis = millis();
     if(animationState == "none")
     {
         setAll(Red, Green, Blue);
     }
     if(animationState == "rain") {
-            uint16_t i, j;
-            for (j = 0; j < 256; j++) {
+        uint16_t i, j;
+        for (j = 0; j < 256; j++) {
+            if (currentMillis - previousMillis >= 40) {
+                previousMillis = currentMillis;
                 for (i = 0; i < strip.numPixels(); i++) {
                     strip.setPixelColor(i, Wheel((i + j) & 255));
                 }
                 strip.show();
-                delay(40);
-            }
+            }else{j--;}
         }
+    }
     if(animationState == "fade"){
         float r, g, b;
         for(int k = 0; k < 256; k=k+1) {
@@ -154,64 +216,4 @@ void handleAnimation(AsyncWebServerRequest *request) {
             delay(40);
         }
     }
-    request->send(200, "text/plane", animationState);
-}
-//==============================================================
-//                  SETUP
-//==============================================================
-void setup(void){
-    Serial.begin(115200);
-
-    strip.begin();
-    strip.show();
-
-    WiFi.hostname("Wemos_Led_RGB");
-    WiFi.begin(ssid, password);     //Connect to your WiFi router
-    Serial.println("");
-
-    //Onboard LED port Direction output
-    pinMode(LED,OUTPUT);
-
-    // Wait for connection
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    //If connection successful show IP address in serial monitor
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());  //IP address assigned to your ESP
-    server.on("/",HTTP_GET, [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
-
-        request->send(200, "text/html", MAIN_page);
-
-    });
-
-    server.on("/javaScript", [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
-
-        request->send(200, "text/html", javaScript);
-
-    });
-
-    server.on("/cssCode", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
-
-        request->send(200, "text/css", cssCode);
-
-    });
-    server.on("/setLED", handleLED);
-    server.on("/animationState", handleAnimation);
-    server.on("/color", handleColor);
-    server.begin();                  //Start server
-    Serial.println("HTTP server started");
-    FadeInOut(100, 100, 100);
-}
-//==============================================================
-//                     LOOP
-//==============================================================
-
-void loop(void){
-
 }

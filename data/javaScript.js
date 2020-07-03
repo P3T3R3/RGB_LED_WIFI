@@ -51,8 +51,6 @@ function powerLED() {
     xhttp.send();
 }
 
-
-
 /*function getData() {
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
