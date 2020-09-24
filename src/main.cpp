@@ -4,22 +4,30 @@
 #include <ESPAsyncWebServer.h>
 #include <cstdio>
 #include "LittleFS.h"
-//Static IP address configuration
-IPAddress staticIP(192, 168, 66, 63); //ESP static ip
-IPAddress gateway(192, 168, 66, 1);   //IP Address of your WiFi Router (Gateway)
-IPAddress subnet(255, 255, 255, 0);  //Subnet mask
-IPAddress dns(192, 168, 66, 1);  //DNS
 
 const char* ssid = "Katowice";
 const char* password = "Akant24#!";
 
 #define PIN 4
-#define NUM_LEDS 60
-int Red, Green, Blue;
-unsigned long previousMillis = 0;
+#define POWER_PIN 14
+#define NUM_LEDS 120
+#define LED 2  //On board LED
+
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 AsyncWebServer server(80); //Server on port 80
-#define LED 2  //On board LED
+
+unsigned long previousMillis = 0;
+unsigned long pixelsInterval=40;  // the time we need to wait
+unsigned long colorWipePreviousMillis=0;
+unsigned long rainbowPreviousMillis=0;
+unsigned long colorWipePreviousMillis2=0;
+unsigned long rainbowCyclesPreviousMillis=0;
+
+int Red, Green, Blue;
+int rainbowCycles = 0;
+int rainbowCycleCycles = 0;
+uint16_t currentPixel = 0;
+
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
@@ -36,28 +44,6 @@ void setAll(byte red, byte green, byte blue) {
     }
     strip.show();
 }
-//zmiana
-void FadeInOut(byte red, byte green, byte blue){
-    float r, g, b;
-
-    for(int k = 0; k < 256; k=k+1) {
-        r = (k/256.0)*red;
-        g = (k/256.0)*green;
-        b = (k/256.0)*blue;
-        setAll(r,g,b);
-        strip.show();
-        delay(5);
-    }
-
-    for(int k = 255; k >= 0; k=k-2) {
-        r = (k/256.0)*red;
-        g = (k/256.0)*green;
-        b = (k/256.0)*blue;
-        setAll(r,g,b);
-        strip.show();
-        delay(5);
-    }
-}
 
 uint32_t Wheel(byte WheelPos) {
     WheelPos = 255 - WheelPos;
@@ -72,6 +58,24 @@ uint32_t Wheel(byte WheelPos) {
     return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
 
+void colorWipe(uint32_t c){
+    strip.setPixelColor(currentPixel,c);
+    strip.show();
+    currentPixel++;
+    if(currentPixel == NUM_LEDS){
+        currentPixel = 0;
+    }
+}
+
+void rainbow() {
+    for(uint16_t i=0; i<strip.numPixels(); i++) {
+        strip.setPixelColor(i, Wheel((i+rainbowCycles) & 255));
+    }
+    strip.show();
+    rainbowCycles++;
+    if(rainbowCycles >= 256) rainbowCycles = 0;
+}
+
 void handleColor(AsyncWebServerRequest *request) {
     auto hex_state = request->arg("hex");
     const char *cstr = hex_state.c_str();
@@ -80,7 +84,6 @@ void handleColor(AsyncWebServerRequest *request) {
     Serial.println(Red);
     Serial.println(Green);
     Serial.println(Blue);
-    setAll(Red, Green, Blue);
     request->send(200, "text/plane", hex_state);
 }
 
@@ -92,12 +95,14 @@ void handleLED(AsyncWebServerRequest *request) {
 
     if(t_state == "1")
     {
-        digitalWrite(LED,LOW); //LED ON
+        digitalWrite(LED,LOW);
+        digitalWrite(POWER_PIN, HIGH);//LED ON
         ledState = "ON"; //Feedback parameter
     }
     else
     {
-        digitalWrite(LED,HIGH); //LED OFF
+        digitalWrite(LED,HIGH);
+        digitalWrite(POWER_PIN, LOW);//LED OFF
         ledState = "OFF"; //Feedback parameter
     }
 
@@ -118,14 +123,14 @@ void setup(void){
     LittleFS.begin();
     strip.begin();
     strip.show();
-
+    currentPixel = 0;
     WiFi.hostname("Wemos_Led_RGB");
     WiFi.begin(ssid, password);     //Connect to your WiFi router
     Serial.println("");
 
     //Onboard LED port Direction output
     pinMode(LED,OUTPUT);
-
+    pinMode(POWER_PIN,OUTPUT);
     // Wait for connection
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -160,31 +165,23 @@ void setup(void){
     server.on("/color", handleColor);
     server.begin();                  //Start server
     Serial.println("HTTP server started");
-    FadeInOut(100, 100, 100);
 }
 //==============================================================
 //                     LOOP
 //==============================================================
 
 void loop(void){
-    unsigned long currentMillis = millis();
     if(animationState == "none")
     {
         setAll(Red, Green, Blue);
     }
     if(animationState == "rain") {
-        uint16_t i, j;
-        for (j = 0; j < 256; j++) {
-            if (currentMillis - previousMillis >= 40) {
-                previousMillis = currentMillis;
-                for (i = 0; i < strip.numPixels(); i++) {
-                    strip.setPixelColor(i, Wheel((i + j) & 255));
-                }
-                strip.show();
-            }else{j--;}
+        if ((unsigned long)(millis() - rainbowPreviousMillis) >= pixelsInterval) {
+            rainbowPreviousMillis = millis();
+            rainbow();
         }
     }
-    if(animationState == "fade"){
+    /*if(animationState == "fade"){
         float r, g, b;
         for(int k = 0; k < 256; k=k+1) {
             r = (k/256.0)*Red;
@@ -192,7 +189,6 @@ void loop(void){
             b = (k/256.0)*Blue;
             setAll(r,g,b);
             strip.show();
-            delay(5);
         }
 
         for(int k = 255; k >= 0; k=k-2) {
@@ -201,19 +197,17 @@ void loop(void){
             b = (k/256.0)*Blue;
             setAll(r,g,b);
             strip.show();
-            delay(5);
         }
-    }
+    }*/
     if(animationState == "wipe"){
-        for(uint16_t i=0; i<NUM_LEDS; i++) {
-            setPixel(i, Red, Green, Blue);
-            strip.show();
-            delay(40);
+        if ((unsigned long)(millis() - colorWipePreviousMillis) >= pixelsInterval) {
+            colorWipePreviousMillis = millis();
+            colorWipe(strip.Color(Red,Green,Blue));
+            }
+        if ((unsigned long)(millis() - colorWipePreviousMillis2) >= pixelsInterval) {
+            colorWipePreviousMillis2 = millis();
+            colorWipe(strip.Color(0,0,0));
         }
-        for(uint16_t i=0; i<NUM_LEDS; i++) {
-            setPixel(i, 0, 0, 0);
-            strip.show();
-            delay(40);
-        }
+
     }
 }
