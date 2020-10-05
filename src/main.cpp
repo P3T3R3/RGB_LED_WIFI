@@ -170,12 +170,13 @@ void setup(void){
         } else { // U_FS
             type = "filesystem";
         }
-
+        LittleFS.end();
         // NOTE: if updating FS this would be the place to unmount FS using FS.end()
         Serial.println("Start updating " + type);
     });
     ArduinoOTA.onEnd([]() {
         Serial.println("\nEnd");
+        ESP.restart();
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
         Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
