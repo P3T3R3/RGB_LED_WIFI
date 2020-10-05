@@ -18,16 +18,12 @@ const char* password = "Akant24#!";
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 AsyncWebServer server(80); //Server on port 80
 
-unsigned long previousMillis = 0;
 unsigned long pixelsInterval=40;  // the time we need to wait
 unsigned long colorWipePreviousMillis=0;
 unsigned long rainbowPreviousMillis=0;
-unsigned long colorWipePreviousMillis2=0;
-unsigned long rainbowCyclesPreviousMillis=0;
 
 int Red=0, Green=0, Blue=0;
 int rainbowCycles = 0;
-int rainbowCycleCycles = 0;
 uint16_t currentPixel = 0;
 
 //===============================================================
@@ -77,19 +73,20 @@ void rainbow() {
 }
 
 void handleColor(AsyncWebServerRequest *request) {
-    auto hex_state = request->arg("hex");
-    auto cstr = hex_state.c_str();
-    Serial.println(hex_state);
+    //auto hex_state = request->arg("hex");
+   // auto cstr = hex_state.c_str();
+    auto cstr = request->arg("hex").c_str();
+
+    Serial.println(cstr);
     sscanf(cstr, "%02x%02x%02x", &Red, &Green, &Blue);
     /*Serial.println(Red);
     Serial.println(Green);
     Serial.println(Blue);*/
-    request->send(200, "text/plane", hex_state);
+    request->send(200, "text/plane", cstr);
 }
 
 void handleLED(AsyncWebServerRequest *request) {
-
-    auto ledState = "OFF";
+    String ledState;
     auto t_state = request->arg("LEDstate");
     Serial.println(t_state);
 
@@ -115,6 +112,44 @@ void handleAnimation(AsyncWebServerRequest *request) {
     Serial.println(animationState);
     request->send(200, "text/plane", animationState);
 }
+void netinit() {
+    WiFi.hostname("Wemos_Led_RGB");
+    WiFi.begin(ssid, password);     //Connect to your WiFi router
+    Serial.println("");
+    while (WiFi.status() != WL_CONNECTED) { // Wait for connection
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");//If connection successful show IP address in serial monitor
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());//IP address assigned to your ESP
+    if (!MDNS.begin("piotrek")) {             // Start the mDNS responder for esp8266.local
+        Serial.println("Error setting up MDNS responder!");
+    }
+    Serial.println("mDNS responder started");
+
+    server.on("/", HTTP_GET,
+              [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
+                  request->send(LittleFS, "/index.html", String());
+              });
+
+    server.on("/javaScript.js",
+              [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
+                  request->send(LittleFS, "/javaScript.js", "text/html");
+              });
+
+    server.on("/cssCode.css", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
+        request->send(LittleFS, "/cssCode.css", "text/css");
+    });
+    server.on("/setLED", handleLED);
+    server.on("/animationState", handleAnimation);
+    server.on("/color", handleColor);
+    server.begin();                  //Start server
+    Serial.println("HTTP server started");
+}
+
 //==============================================================
 //                  SETUP
 //==============================================================
@@ -125,46 +160,12 @@ void setup(void){
     strip.show();
 
     currentPixel = 0;
-    WiFi.hostname("Wemos_Led_RGB");
-    WiFi.begin(ssid, password);     //Connect to your WiFi router
-    Serial.println("");
 
     //Onboard LED port Direction output
     pinMode(LED,OUTPUT);
     pinMode(POWER_PIN,OUTPUT);
-    // Wait for connection
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
 
-    //If connection successful show IP address in serial monitor
-    Serial.println("");
-    Serial.print("Connected to ");
-    Serial.println(ssid);
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());//IP address assigned to your ESP
-    if (!MDNS.begin("piotrek")) {             // Start the mDNS responder for esp8266.local
-        Serial.println("Error setting up MDNS responder!");
-    }
-    Serial.println("mDNS responder started");
-
-    server.on("/",HTTP_GET, [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
-        request->send(LittleFS, "/index.html", String());
-    });
-
-    server.on("/javaScript.js", [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
-        request->send(LittleFS,"/javaScript.js", "text/html");
-    });
-
-    server.on("/cssCode.css", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
-        request->send(LittleFS,"/cssCode.css", "text/css");
-    });
-    server.on("/setLED", handleLED);
-    server.on("/animationState", handleAnimation);
-    server.on("/color", handleColor);
-    server.begin();                  //Start server
-    Serial.println("HTTP server started");
+    netinit(); //network initialization
 
     //OTA//
     ArduinoOTA.setHostname("Piotrek's_esp8266");
@@ -213,18 +214,27 @@ void setup(void){
 bool ota_flag = true;
 auto time_elapsed = 0;
 void loop(void){
-    /*if(ota_flag)
-    {while(time_elapsed<15000){
-        ArduinoOTA.handle();
-        time_elapsed = millis();
-        delay(10);
-    }
-    ota_flag = false;
-    }*/
+    if(ota_flag) {
+        while (time_elapsed < 15000) {
+            ArduinoOTA.handle();
+            time_elapsed = millis();
+            delay(10);
+        }
+        ota_flag = false;
+    }else
+        {
+            if (animationState == "fade" && Blue==255)
+            {
+                ArduinoOTA.handle();
+            }
+        }
+
+
+
     if (WiFi.status() != WL_CONNECTED) {
-        WiFi.begin(ssid, password);
+        server.end();
+        netinit();
     }
-    ArduinoOTA.handle();
     if(animationState == "")
     {
         setAll(Red, Green, Blue);
