@@ -5,6 +5,7 @@
 #include "LittleFS.h"
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <ESP8266mDNS.h>
 
 const char* ssid = "Katowice";
 const char* password = "Akant24#!";
@@ -24,7 +25,7 @@ unsigned long rainbowPreviousMillis=0;
 unsigned long colorWipePreviousMillis2=0;
 unsigned long rainbowCyclesPreviousMillis=0;
 
-int Red, Green, Blue;
+int Red=0, Green=0, Blue=0;
 int rainbowCycles = 0;
 int rainbowCycleCycles = 0;
 uint16_t currentPixel = 0;
@@ -108,7 +109,7 @@ void handleLED(AsyncWebServerRequest *request) {
     request->send(200, "text/plane", ledState); //Send web page
 }
 
-String animationState;
+String animationState="";
 void handleAnimation(AsyncWebServerRequest *request) {
     animationState = request->arg("anim");
     Serial.println(animationState);
@@ -142,7 +143,12 @@ void setup(void){
     Serial.print("Connected to ");
     Serial.println(ssid);
     Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());  //IP address assigned to your ESP
+    Serial.println(WiFi.localIP());//IP address assigned to your ESP
+    if (!MDNS.begin("piotrek")) {             // Start the mDNS responder for esp8266.local
+        Serial.println("Error setting up MDNS responder!");
+    }
+    Serial.println("mDNS responder started");
+
     server.on("/",HTTP_GET, [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
         request->send(LittleFS, "/index.html", String());
     });
@@ -175,8 +181,8 @@ void setup(void){
         Serial.println("Start updating " + type);
     });
     ArduinoOTA.onEnd([]() {
-        Serial.println("\nEnd");
         ESP.restart();
+        Serial.println("\nEnd");
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
         Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
@@ -207,15 +213,19 @@ void setup(void){
 bool ota_flag = true;
 auto time_elapsed = 0;
 void loop(void){
-    if(ota_flag)
+    /*if(ota_flag)
     {while(time_elapsed<15000){
         ArduinoOTA.handle();
         time_elapsed = millis();
         delay(10);
     }
     ota_flag = false;
+    }*/
+    if (WiFi.status() != WL_CONNECTED) {
+        WiFi.begin(ssid, password);
     }
-    if(animationState == "none")
+    ArduinoOTA.handle();
+    if(animationState == "")
     {
         setAll(Red, Green, Blue);
     }
@@ -231,10 +241,7 @@ void loop(void){
             colorWipePreviousMillis = millis();
             colorWipe(strip.Color(Red,Green,Blue));
             }
-        if ((unsigned long)(millis() - colorWipePreviousMillis2) >= pixelsInterval) {
-            colorWipePreviousMillis2 = millis();
-            colorWipe(strip.Color(0,0,0));
-        }
+
 
     }
 }
