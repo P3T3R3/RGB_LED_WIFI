@@ -5,17 +5,16 @@
 #include "LittleFS.h"
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-#include <ESP8266mDNS.h>
 
 const char* ssid = "Katowice";
-const char* password = "Akant24#!";
+const char* password = "Akant243!";
 
-#define PIN 4
+#define RGB_LED_PIN 4
 #define POWER_PIN 14
 #define NUM_LEDS 109
 #define LED 2  //On board LED
 
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, RGB_LED_PIN, NEO_GRB + NEO_KHZ800);
 AsyncWebServer server(80); //Server on port 80
 
 unsigned long pixelsInterval=40;  // the time we need to wait
@@ -73,13 +72,11 @@ void rainbow() {
 }
 
 void handleColor(AsyncWebServerRequest *request) {
-    //auto hex_state = request->arg("hex");
-   // auto cstr = hex_state.c_str();
     auto cstr = request->arg("hex").c_str();
-
-    Serial.println(cstr);
     sscanf(cstr, "%02x%02x%02x", &Red, &Green, &Blue);
-    /*Serial.println(Red);
+    /*
+    Serial.println(cstr);
+    Serial.println(Red);
     Serial.println(Green);
     Serial.println(Blue);*/
     request->send(200, "text/plane", cstr);
@@ -112,7 +109,7 @@ void handleAnimation(AsyncWebServerRequest *request) {
     Serial.println(animationState);
     request->send(200, "text/plane", animationState);
 }
-void netinit() {
+void netInit() {
     WiFi.hostname("Wemos_Led_RGB");
     WiFi.begin(ssid, password);     //Connect to your WiFi router
     Serial.println("");
@@ -125,10 +122,6 @@ void netinit() {
     Serial.println(ssid);
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());//IP address assigned to your ESP
-    if (!MDNS.begin("piotrek")) {             // Start the mDNS responder for esp8266.local
-        Serial.println("Error setting up MDNS responder!");
-    }
-    Serial.println("mDNS responder started");
 
     server.on("/", HTTP_GET,
               [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
@@ -165,7 +158,7 @@ void setup(void){
     pinMode(LED,OUTPUT);
     pinMode(POWER_PIN,OUTPUT);
 
-    netinit(); //network initialization
+    netInit(); //network initialization
 
     //OTA//
     ArduinoOTA.setHostname("Piotrek's_esp8266");
@@ -212,46 +205,36 @@ void setup(void){
 //                     LOOP
 //==============================================================
 bool ota_flag = true;
-auto time_elapsed = 0;
+
 void loop(void){
     if(ota_flag) {
-        while (time_elapsed < 15000) {
+        if (millis() <= 15000UL) {
             ArduinoOTA.handle();
-            time_elapsed = millis();
-            delay(10);
+        } else {
+            ota_flag = false;
         }
-        ota_flag = false;
-    }else
-        {
-            if (animationState == "fade" && Blue==255)
-            {
-                ArduinoOTA.handle();
-            }
-        }
-
-
-
+    }
     if (WiFi.status() != WL_CONNECTED) {
         server.end();
-        netinit();
+        netInit();
     }
+
     if(animationState == "")
     {
         setAll(Red, Green, Blue);
-    }
+    }else
     if(animationState == "rain") {
-        if ((unsigned long)(millis() - rainbowPreviousMillis) >= pixelsInterval) {
+        if (millis() - rainbowPreviousMillis >= pixelsInterval) {
             rainbowPreviousMillis = millis();
             rainbow();
         }
-    }
-
+    }else
     if(animationState == "wipe"){
-        if ((unsigned long)(millis() - colorWipePreviousMillis) >= pixelsInterval) {
+        if (millis() - colorWipePreviousMillis >= pixelsInterval) {
             colorWipePreviousMillis = millis();
             colorWipe(strip.Color(Red,Green,Blue));
             }
-
-
     }
+
+    delay(1);
 }
