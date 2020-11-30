@@ -1,120 +1,63 @@
-#include <Adafruit_NeoPixel.h>
+#include <ArduinoOTA.h>
+#include <NeoPixelBus.h>
 #include <ESP8266WiFi.h>
 #include <ESPAsyncWebServer.h>
-#include <cstdio>
-#include "LittleFS.h"
 #include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include <ESP8266mDNS.h>
+#include <LittleFS.h>
+#include <cstdio>
+#include "credentials.h" //external library for credentials
 
-const char* ssid = "Katowice";
-const char* password = "Akant24#!";
-
-#define PIN 4
-#define POWER_PIN 14
-#define NUM_LEDS 109
-#define LED 2  //On board LED
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
-AsyncWebServer server(80); //Server on port 80
-
-unsigned long pixelsInterval=40;  // the time we need to wait
-unsigned long colorWipePreviousMillis=0;
-unsigned long rainbowPreviousMillis=0;
-
-int Red=0, Green=0, Blue=0;
-int rainbowCycles = 0;
-uint16_t currentPixel = 0;
+#define RGB_LED_PIN 3 //Led signal pin
+#define POWER_PIN 14 //Signal pin to transistor that switch on ATX power supply
+#define NUM_LED 109
 
 //===============================================================
-// This routine is executed when you open its IP in browser
+// Wifi Credentials
+//===============================================================
+const char* ssid = WIFI_SSID;  //SSID
+const char* password = WIFI_PASSWORD; //Password
+
+NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(NUM_LED, RGB_LED_PIN);
+//NeoPixelBus declaration for WS2812B pixels, on ESP8266 only GPIO 3 pin or Rxo pin is available for this method
+
+AsyncWebServer server(80); //Web server on port 80
+
+//Global Variables
+unsigned long pixelsInterval=40;  //animation interval
+unsigned long rainbowPreviousMillis=0; //rainbow animation clock
+
+String animationState=""; //
+
+int Red=0, Green=0, Blue=0; //Color values updated by handleColor()
+int rainbowCycles = 0; //rainbow() animation state
+
+//===============================================================
+// LED ANIMATIONS FUNCTIONS
 //===============================================================
 
-void setPixel(int Pixel, byte red, byte green, byte blue) {
-    strip.setPixelColor(Pixel, strip.Color(red, green, blue));
-}
+void setPixel(int, byte, byte, byte);
 
-void setAll(byte red, byte green, byte blue) {
-    for(int i = 0; i < NUM_LEDS; i++ ) {
-        setPixel(i, red, green, blue);
-    }
-    strip.show();
-}
+void setAll(byte, byte, byte);
 
-uint32_t Wheel(byte WheelPos) {
-    WheelPos = 255 - WheelPos;
-    if(WheelPos < 85) {
-        return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
-    }
-    if(WheelPos < 170) {
-        WheelPos -= 85;
-        return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
-    }
-    WheelPos -= 170;
-    return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-}
+RgbColor rainbowWheel(byte);
 
-void colorWipe(uint32_t c){
-    strip.setPixelColor(currentPixel,c);
-    strip.show();
-    currentPixel++;
-    if(currentPixel == NUM_LEDS){
-        currentPixel = 0;
-    }
-}
+void rainbow();
 
-void rainbow() {
-    for(uint16_t i=0; i<strip.numPixels(); i++) {
-        strip.setPixelColor(i, Wheel((i+rainbowCycles) & 255));
-    }
-    strip.show();
-    rainbowCycles++;
-    if(rainbowCycles >= 256) rainbowCycles = 0;
-}
+//===============================================================
+// Web-Client Handlers
+//===============================================================
+void handleColor(AsyncWebServerRequest *request);
 
-void handleColor(AsyncWebServerRequest *request) {
-    //auto hex_state = request->arg("hex");
-   // auto cstr = hex_state.c_str();
-    auto cstr = request->arg("hex").c_str();
+void handlePower(AsyncWebServerRequest *request);
 
-    Serial.println(cstr);
-    sscanf(cstr, "%02x%02x%02x", &Red, &Green, &Blue);
-    /*Serial.println(Red);
-    Serial.println(Green);
-    Serial.println(Blue);*/
-    request->send(200, "text/plane", cstr);
-}
+void handleAnimationState(AsyncWebServerRequest *request);
 
-void handleLED(AsyncWebServerRequest *request) {
-    String ledState;
-    auto t_state = request->arg("LEDstate");
-    Serial.println(t_state);
-
-    if(t_state == "1")
-    {
-        digitalWrite(LED,LOW);
-        digitalWrite(POWER_PIN, HIGH);//LED ON
-        ledState = "ON"; //Feedback parameter
-    }
-    else
-    {
-        digitalWrite(LED,HIGH);
-        digitalWrite(POWER_PIN, LOW);//LED OFF
-        ledState = "OFF"; //Feedback parameter
-    }
-
-    request->send(200, "text/plane", ledState); //Send web page
-}
-
-String animationState="";
-void handleAnimation(AsyncWebServerRequest *request) {
-    animationState = request->arg("anim");
-    Serial.println(animationState);
-    request->send(200, "text/plane", animationState);
-}
-void netinit() {
-    WiFi.hostname("Wemos_Led_RGB");
+void netInit() //network initialization function
+{
+    WiFi.hostname(HOSTNAME);
     WiFi.begin(ssid, password);     //Connect to your WiFi router
+
+    //SERIAL FEEDBACK SECTION
     Serial.println("");
     while (WiFi.status() != WL_CONNECTED) { // Wait for connection
         delay(500);
@@ -125,11 +68,9 @@ void netinit() {
     Serial.println(ssid);
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());//IP address assigned to your ESP
-    if (!MDNS.begin("piotrek")) {             // Start the mDNS responder for esp8266.local
-        Serial.println("Error setting up MDNS responder!");
-    }
-    Serial.println("mDNS responder started");
 
+
+    //DEFINE HANDLERS
     server.on("/", HTTP_GET,
               [](AsyncWebServerRequest *request) {                     //Define the handling function for root path (HTML message)
                   request->send(LittleFS, "/index.html", String());
@@ -143,50 +84,52 @@ void netinit() {
     server.on("/cssCode.css", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
         request->send(LittleFS, "/cssCode.css", "text/css");
     });
-    server.on("/setLED", handleLED);
-    server.on("/animationState", handleAnimation);
+    server.on("/setLED", handlePower);
+    server.on("/animationState", handleAnimationState);
     server.on("/color", handleColor);
-    server.begin();                  //Start server
-    Serial.println("HTTP server started");
+
+    server.begin(); //Start server
+
+    Serial.println("HTTP server started"); //Feedback
 }
 
 //==============================================================
 //                  SETUP
 //==============================================================
 void setup(void){
-    Serial.begin(115200);
-    LittleFS.begin();
-    strip.begin();
-    strip.show();
+    Serial.begin(115200); //setup serial for feedback
 
-    currentPixel = 0;
+    LittleFS.begin(); //LittleFS filesystem initialization
 
     //Onboard LED port Direction output
-    pinMode(LED,OUTPUT);
+    pinMode(LED_BUILTIN,OUTPUT);
     pinMode(POWER_PIN,OUTPUT);
 
-    netinit(); //network initialization
+    netInit(); //Network initialization
 
-    //OTA//
-    ArduinoOTA.setHostname("Piotrek's_esp8266");
-    ArduinoOTA.setPassword("K9peter9$");
+    strip.Begin(); //Addressable LEDs initialization
+    strip.Show(); //Addressable LEDs all off
+    //=============================
+    //          OTA             //
+    //============================
+    ArduinoOTA.setHostname(HOSTNAME);
+    ArduinoOTA.setPassword(OTA_PASSWORD);
     ArduinoOTA.onStart([]() {
         String type;
         if (ArduinoOTA.getCommand() == U_FLASH) {
             type = "sketch";
-        } else { // U_FS
+        } else { //U_FS
             type = "filesystem";
         }
-        LittleFS.end();
-        // NOTE: if updating FS this would be the place to unmount FS using FS.end()
-        Serial.println("Start updating " + type);
+        LittleFS.end(); //IMPORTANT: unmount filesystem before OTA update
+        Serial.println("Start updating " + type); //Serial feedback
     });
     ArduinoOTA.onEnd([]() {
         ESP.restart();
         Serial.println("\nEnd");
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+        Serial.printf("Progress: %u%%\r", (progress / (total / 100))); //Serial feedback
     });
     ArduinoOTA.onError([](ota_error_t error) {
         Serial.printf("Error[%u]: ", error);
@@ -200,9 +143,11 @@ void setup(void){
             Serial.println("Receive Failed");
         } else if (error == OTA_END_ERROR) {
             Serial.println("End Failed");
-        }
+        } //Serial feedback
     });
-    ArduinoOTA.begin();
+    ArduinoOTA.begin(); //OTA initialization
+
+    //Serial feedback
     Serial.println("Ready");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
@@ -211,47 +156,114 @@ void setup(void){
 //==============================================================
 //                     LOOP
 //==============================================================
-bool ota_flag = true;
-auto time_elapsed = 0;
+
+bool otaFlag = true; //
+
 void loop(void){
-    if(ota_flag) {
-        while (time_elapsed < 15000) {
+
+    if(otaFlag)  //OTA enabled for 15 seconds after start for safety reasons
+    {
+        if (millis() <= 15000UL) {
             ArduinoOTA.handle();
-            time_elapsed = millis();
-            delay(10);
+        } else {
+            otaFlag = false;
         }
-        ota_flag = false;
-    }else
-        {
-            if (animationState == "fade" && Blue==255)
-            {
-                ArduinoOTA.handle();
-            }
-        }
-
-
-
-    if (WiFi.status() != WL_CONNECTED) {
-        server.end();
-        netinit();
     }
-    if(animationState == "")
+
+    if (WiFi.status() != WL_CONNECTED) //reinitialize server when connection lost
+    {
+        server.reset();
+        server.end();
+        netInit();
+    }
+
+    if(animationState == "")//solid color mode
     {
         setAll(Red, Green, Blue);
     }
-    if(animationState == "rain") {
-        if ((unsigned long)(millis() - rainbowPreviousMillis) >= pixelsInterval) {
+    else if(animationState == "rain")//rainbow animation mode
+    {
+        if (millis() - rainbowPreviousMillis >= pixelsInterval) {
             rainbowPreviousMillis = millis();
             rainbow();
         }
     }
 
-    if(animationState == "wipe"){
-        if ((unsigned long)(millis() - colorWipePreviousMillis) >= pixelsInterval) {
-            colorWipePreviousMillis = millis();
-            colorWipe(strip.Color(Red,Green,Blue));
-            }
+}
 
+//===============================================================
+// LED ANIMATIONS FUNCTIONS
+//===============================================================
+void setPixel(int Pixel, byte red, byte green, byte blue) //simplify setting specific pixel to specific color
+{
+    strip.SetPixelColor(Pixel, RgbColor(red, green, blue));
+}
 
+void setAll(byte red, byte green, byte blue) //all available led to specific color
+{
+    for(int i = 0; i < NUM_LED; i++ ) {
+        setPixel(i, red, green, blue);
     }
+    strip.Show();
+}
+
+RgbColor rainbowWheel(byte WheelPos) //drives rainbow animation
+{
+    WheelPos = 255 - WheelPos;
+    if(WheelPos < 85) {
+        return RgbColor(255 - WheelPos * 3, 0, WheelPos * 3);
+    }
+    if(WheelPos < 170) {
+        WheelPos -= 85;
+        return RgbColor(0, WheelPos * 3, 255 - WheelPos * 3);
+    }
+    WheelPos -= 170;
+    return RgbColor(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
+
+void rainbow()
+{
+    for(uint16_t i=0; i<strip.PixelCount(); i++) {
+        strip.SetPixelColor(i, rainbowWheel((i + rainbowCycles) & 255));
+    }
+    strip.Show(); //update strip colors
+    rainbowCycles++; //update rainbow state
+    if(rainbowCycles >= 256) rainbowCycles = 0; //reset rainbow animation to the beginning when ended
+}
+
+//===============================================================
+// Web-Client Handlers
+//===============================================================
+void handleColor(AsyncWebServerRequest *request) //Used when client update color value
+{
+    auto hex = request->arg("hex").c_str(); //Get hex color value from client
+    sscanf(hex, "%02x%02x%02x", &Red, &Green, &Blue); //Convert to Red, Green, Blue integers.
+    request->send(200, "text/plain", hex); //Confirm receive with feedback
+}
+
+void handlePower(AsyncWebServerRequest *request) //Used when client switch led power button
+{
+    String ledState;
+    auto powerState = request->arg("LEDstate"); //Get power state from client
+
+    if(powerState == "1") //Led turned on
+    {
+        digitalWrite(LED_BUILTIN,LOW); //Build-in led on as feedback
+        digitalWrite(POWER_PIN, HIGH);//LED ON
+        ledState = "ON"; //Feedback parameter
+    }
+    else if(powerState == "0") //Led turned off
+    {
+        digitalWrite(LED_BUILTIN,HIGH); //Build-in led off as feedback
+        digitalWrite(POWER_PIN, LOW);//LED OFF
+        ledState = "OFF"; //Feedback parameter
+    }
+
+    request->send(200, "text/plain", ledState); //Confirm receive with feedback
+}
+
+void handleAnimationState(AsyncWebServerRequest *request) // //Used when client update animation type
+{
+    animationState = request->arg("anim"); //update animation state
+    request->send(200, "text/plain", animationState); //Confirm receive with feedback
 }
