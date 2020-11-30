@@ -1,16 +1,40 @@
-var colorWheel = new iro.ColorPicker("#colorWheelDemo", {
-
+var sliderPicker = new iro.ColorPicker("#sliderPicker", {
+    width: 250,
+    color: "rgb(255, 0, 0)",
+    borderWidth: 1,
+    borderColor: "#fff",
+    layout: [
+        {
+            component: iro.ui.Slider,
+            options: {
+                sliderType: 'hue'
+            }
+        },
+        {
+            component: iro.ui.Slider,
+            options: {
+                sliderType: 'saturation'
+            }
+        },
+        {
+            component: iro.ui.Slider,
+            options: {
+                sliderType: 'value'
+            }
+        },
+    ]
 });
+
 var lastMove = 0;
 setInterval(function() {
     // Call a function repetatively with 2 Second interval
     // getData();
 }, 1000); //2000mSeconds update rate
-colorWheel.on('input:change', function(color) {
+sliderPicker.on('input:change', function(color) {
 
     if(Date.now() - lastMove > 40) {
         var xhttp = new XMLHttpRequest();
-        var hex = colorWheel.color.hexString;
+        var hex = sliderPicker.color.hexString;
         var hexCode = hex.substr(1);
         console.log(hex);
         xhttp.open("GET", "color?hex=" + hexCode, true);
