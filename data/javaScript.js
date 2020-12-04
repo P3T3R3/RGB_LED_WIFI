@@ -1,6 +1,6 @@
 var sliderPicker = new iro.ColorPicker("#sliderPicker", {
     width: 250,
-    color: "rgb(255, 0, 0)",
+    color: "rgb(255,0,0)",
     borderWidth: 1,
     borderColor: "#fff",
     layout: [
@@ -28,8 +28,10 @@ var sliderPicker = new iro.ColorPicker("#sliderPicker", {
 var lastMove = 0;
 setInterval(function() {
     // Call a function repetatively with 2 Second interval
-    // getData();
+    getColorData();
+    getLedData();
 }, 1000); //2000mSeconds update rate
+
 sliderPicker.on('input:change', function(color) {
 
     if(Date.now() - lastMove > 40) {
@@ -75,14 +77,31 @@ function powerLED() {
     xhttp.send();
 }
 
-/*function getData() {
+function getColorData() {
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
         if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("ADCValue").innerHTML =
-                this.responseText;
+            sliderPicker.color.hexString = "#" + this.responseText;
         }
     };
-    xhttp.open("GET", "readADC", true);
+    xhttp.open("GET", "updateColor", true);
     xhttp.send();
-}*/
+}
+
+function getLedData() {
+    var xhttp = new XMLHttpRequest();
+    var checkBox = document.getElementById("powerSwitch");
+    xhttp.onreadystatechange = function() {
+        if (this.readyState == 4 && this.status == 200) {
+            if(this.responseText=="1") {
+                checkBox.checked = true;
+            }else
+            {
+                checkBox.checked = false;
+            }
+
+        }
+    };
+    xhttp.open("GET", "updateLed", true);
+    xhttp.send();
+}

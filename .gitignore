@@ -1,5 +1,9 @@
 .pio
 src/credentials.h
+platformio.ini
 # Project exclude paths
 /cmake-build-d1_mini/
 /cmake-build-debug/
+/test/
+/lib/
+/include/

@@ -17,20 +17,22 @@
 const char* ssid = WIFI_SSID;  //SSID
 const char* password = WIFI_PASSWORD; //Password
 
-NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(NUM_LED, RGB_LED_PIN);
-//NeoPixelBus declaration for WS2812B pixels, on ESP8266 only GPIO 3 pin or Rxo pin is available for this method
+NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(NUM_LED, RGB_LED_PIN); /*
+ * NeoPixelBus declaration for WS2812B pixels,
+ * on ESP8266 only GPIO 3 pin or Rxo pin is available for this method */
 
 AsyncWebServer server(80); //Web server on port 80
 
 //Global Variables
-unsigned long pixelsInterval=40;  //animation interval
-unsigned long rainbowPreviousMillis=0; //rainbow animation clock
+unsigned long pixelsInterval = 40;  //animation interval
+unsigned long rainbowPreviousMillis = 0; //rainbow animation clock
 
-String animationState=""; //
+String animationMode = ""; //lighting mode: solid, rainbow animation
 
-int Red=0, Green=0, Blue=0; //Color values updated by handleColor()
+int Red = 0, Green = 0, Blue = 0; //Color values updated by handleColor()
 int rainbowCycles = 0; //rainbow() animation state
-
+String ledState;
+String hexColor;
 //===============================================================
 // LED ANIMATIONS FUNCTIONS
 //===============================================================
@@ -51,6 +53,10 @@ void handleColor(AsyncWebServerRequest *request);
 void handlePower(AsyncWebServerRequest *request);
 
 void handleAnimationState(AsyncWebServerRequest *request);
+
+void updateLed(AsyncWebServerRequest *request);
+
+void updateColor(AsyncWebServerRequest *request);
 
 void netInit() //network initialization function
 {
@@ -80,13 +86,18 @@ void netInit() //network initialization function
               [](AsyncWebServerRequest *request) { //Define the handling function for the javascript path
                   request->send(LittleFS, "/javaScript.js", "text/html");
               });
-
+    server.on("/iro5.js",
+              [](AsyncWebServerRequest *request) { //Define the handling function for the color picker javascript path
+                  request->send(LittleFS, "/iro5.js", "text/html");
+              });
     server.on("/cssCode.css", [](AsyncWebServerRequest *request) { //Define the handling function for the CSS path
         request->send(LittleFS, "/cssCode.css", "text/css");
     });
-    server.on("/setLED", handlePower);
-    server.on("/animationState", handleAnimationState);
-    server.on("/color", handleColor);
+    server.on("/setLED", handlePower); //Asynchronous javascript to send power led to server
+    server.on("/animationState", handleAnimationState); //Asynchronous javascript to send animation state to server
+    server.on("/color", handleColor); //Asynchronous javascript to send color to server
+    server.on("/updateColor", updateColor);
+    server.on("/updateLed", updateLed);
 
     server.begin(); //Start server
 
@@ -161,15 +172,15 @@ bool otaFlag = true; //
 
 void loop(void){
 
-    if(otaFlag)  //OTA enabled for 15 seconds after start for safety reasons
+   /* if(otaFlag)  //OTA enabled for 15 seconds after start for safety reasons
     {
         if (millis() <= 15000UL) {
             ArduinoOTA.handle();
         } else {
             otaFlag = false;
         }
-    }
-
+    }*/
+    ArduinoOTA.handle();
     if (WiFi.status() != WL_CONNECTED) //reinitialize server when connection lost
     {
         server.reset();
@@ -177,11 +188,11 @@ void loop(void){
         netInit();
     }
 
-    if(animationState == "")//solid color mode
+    if(animationMode == "")//solid color mode
     {
         setAll(Red, Green, Blue);
     }
-    else if(animationState == "rain")//rainbow animation mode
+    else if(animationMode == "rain")//rainbow animation mode
     {
         if (millis() - rainbowPreviousMillis >= pixelsInterval) {
             rainbowPreviousMillis = millis();
@@ -234,36 +245,45 @@ void rainbow()
 //===============================================================
 // Web-Client Handlers
 //===============================================================
+
 void handleColor(AsyncWebServerRequest *request) //Used when client update color value
 {
     auto hex = request->arg("hex").c_str(); //Get hex color value from client
+    hexColor = hex;
     sscanf(hex, "%02x%02x%02x", &Red, &Green, &Blue); //Convert to Red, Green, Blue integers.
     request->send(200, "text/plain", hex); //Confirm receive with feedback
 }
 
 void handlePower(AsyncWebServerRequest *request) //Used when client switch led power button
 {
-    String ledState;
-    auto powerState = request->arg("LEDstate"); //Get power state from client
+
+    auto powerState = ledState = request->arg("LEDstate"); //Get power state from client
 
     if(powerState == "1") //Led turned on
     {
         digitalWrite(LED_BUILTIN,LOW); //Build-in led on as feedback
         digitalWrite(POWER_PIN, HIGH);//LED ON
-        ledState = "ON"; //Feedback parameter
+
     }
     else if(powerState == "0") //Led turned off
     {
         digitalWrite(LED_BUILTIN,HIGH); //Build-in led off as feedback
         digitalWrite(POWER_PIN, LOW);//LED OFF
-        ledState = "OFF"; //Feedback parameter
     }
 
-    request->send(200, "text/plain", ledState); //Confirm receive with feedback
+    request->send(200, "text/plain", powerState); //Confirm receive with feedback
 }
 
 void handleAnimationState(AsyncWebServerRequest *request) // //Used when client update animation type
 {
-    animationState = request->arg("anim"); //update animation state
-    request->send(200, "text/plain", animationState); //Confirm receive with feedback
+    animationMode = request->arg("anim"); //update animation state
+    request->send(200, "text/plain", animationMode); //Confirm receive with feedback
+}
+
+void updateColor(AsyncWebServerRequest *request) {
+    request->send(200, "text/plane", hexColor);
+}
+
+void updateLed(AsyncWebServerRequest *request) {
+    request->send(200, "text/plane", ledState);
 }
